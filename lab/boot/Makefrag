@@ -1,0 +1,32 @@
+#
+# Makefile fragment for the JOS bootloader.
+#
+
+OBJDIRS += boot
+
+BOOT_OBJS := $(OBJDIR)/boot/boot.o $(OBJDIR)/boot/main.o
+
+# 编译 boot 下的 .c 文件，使用 DWARF 调试信息（替代 STABS）
+$(OBJDIR)/boot/%.o: boot/%.c
+	@echo + cc $<
+	@mkdir -p $(@D)
+	$(V)$(CC) -nostdinc $(KERN_CFLAGS) -Os -g -gdwarf-2 -c -o $@ $<
+
+# 编译 boot 下的 .S 文件，同样加上 -g -gdwarf-2
+$(OBJDIR)/boot/%.o: boot/%.S
+	@echo + as $<
+	@mkdir -p $(@D)
+	$(V)$(CC) -nostdinc $(KERN_CFLAGS) -g -gdwarf-2 -c -o $@ $<
+
+# 专门对 boot/main.c 的编译
+$(OBJDIR)/boot/main.o: boot/main.c
+	@echo + cc $<
+	$(V)$(CC) -nostdinc $(KERN_CFLAGS) -Os -g -gdwarf-2 -c -o $(OBJDIR)/boot/main.o boot/main.c
+
+# 链接阶段：生成 boot.out -> boot -> 加签
+$(OBJDIR)/boot/boot: $(BOOT_OBJS)
+	@echo + ld boot/boot
+	$(V)$(LD) $(LDFLAGS) -N -e start -Ttext 0x7C00 -o $@.out $^
+	$(V)$(OBJDUMP) -S $@.out > $@.asm
+	$(V)$(OBJCOPY) -S -O binary -j .text $@.out $@
+	$(V)perl boot/sign.pl $(OBJDIR)/boot/boot
